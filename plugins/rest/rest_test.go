@@ -41,8 +41,30 @@ import (
 
 const keyID = "key1"
 
-func TestNew(t *testing.T) {
+func TestAuthPluginWithNoAuthPluginLookup(t *testing.T) {
+	authPlugin := "anything"
+	cfg := Config{
+		Credentials: struct {
+			Bearer      *bearerAuthPlugin                  `json:"bearer,omitempty"`
+			OAuth2      *oauth2ClientCredentialsAuthPlugin `json:"oauth2,omitempty"`
+			ClientTLS   *clientTLSAuthPlugin               `json:"client_tls,omitempty"`
+			S3Signing   *awsSigningAuthPlugin              `json:"s3_signing,omitempty"`
+			GCPMetadata *gcpMetadataAuthPlugin             `json:"gcp_metadata,omitempty"`
+			Plugin      *string                            `json:"plugin,omitempty"`
+		}{
+			Plugin: &authPlugin,
+		},
+	}
+	_, err := cfg.authPlugin(nil)
+	if err == nil {
+		t.Error("Expected error but got nil")
+	}
+	if want, have := "missing auth plugin lookup function", err.Error(); want != have {
+		t.Errorf("Unexpected error, want %q, have %q", want, have)
+	}
+}
 
+func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
@@ -611,9 +633,10 @@ func TestNew(t *testing.T) {
 				"name": "foo",
 				"url": "http://localhost",
 				"credentials": {
-					"plugin": "my_other_plugin"
+					"plugin": "unknown_plugin"
         }
 			}`,
+			wantErr: true,
 		},
 	}
 

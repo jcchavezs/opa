@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -64,23 +65,22 @@ func (c *Config) Equal(other *Config) bool {
 
 func (c *Config) authPlugin(authPluginLookup func(string) HTTPAuthPlugin) (HTTPAuthPlugin, error) {
 	var candidate HTTPAuthPlugin
-	if c.Credentials.Plugin != nil && authPluginLookup != nil {
+	if c.Credentials.Plugin != nil {
+		if authPluginLookup == nil {
+			// if no authPluginLookup function is passed we can't resolve the plugin
+			return nil, errors.New("missing auth plugin lookup function")
+		}
+
 		candidate := authPluginLookup(*c.Credentials.Plugin)
 		if candidate == nil {
-			c.logger.WithFields(map[string]interface{}{
-				"plugin": *c.Credentials.Plugin,
-			}).Warn("Could not resolve candidate auth plugin")
-		} else {
-			return candidate, nil
+			return nil, fmt.Errorf("auth plugin %q not found", *c.Credentials.Plugin)
 		}
+
+		return candidate, nil
 	}
 	// reflection avoids need for this code to change as auth plugins are added
 	s := reflect.ValueOf(c.Credentials)
 	for i := 0; i < s.NumField(); i++ {
-		if s.Field(i).Type().String() == "*string" {
-			continue
-		}
-
 		if s.Field(i).IsNil() {
 			continue
 		}
@@ -91,6 +91,7 @@ func (c *Config) authPlugin(authPluginLookup func(string) HTTPAuthPlugin) (HTTPA
 
 		candidate = s.Field(i).Interface().(HTTPAuthPlugin)
 	}
+
 	if candidate == nil {
 		return &defaultAuthPlugin{}, nil
 	}
